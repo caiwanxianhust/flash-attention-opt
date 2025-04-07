@@ -14,6 +14,10 @@ set (sample_flash_attention_v2_files
     flash_attention_v2.cu
 )
 
+set (sample_flash_attention_v3_files
+    flash_attention_v3.cu
+)
+
 set (SAMPLES_HEADER_DIR
     ${PROJECT_SOURCE_DIR}/flash_attention
 )
@@ -43,3 +47,7 @@ target_link_libraries(flash_attention_v1 PUBLIC attention)
 add_executable(flash_attention_v2 ${sample_flash_attention_v2_files})
 target_compile_features(flash_attention_v2 PUBLIC cxx_std_14)
 target_link_libraries(flash_attention_v2 PUBLIC attention)
+
+add_executable(flash_attention_v3 ${sample_flash_attention_v3_files})
+target_compile_features(flash_attention_v3 PUBLIC cxx_std_14)
+target_link_libraries(flash_attention_v3 PUBLIC attention)

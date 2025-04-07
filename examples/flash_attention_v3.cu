@@ -33,7 +33,7 @@ void printVec(const float *vec, char *s, int length, int end_id, int start_id = 
 }
 
 void timingAttn(const float *Q, const float *K, const float *V, const int batch_size, const int num_head,
-    const int N, const int M, const int d, float *l, float *m, float *O)
+                const int N, const int M, const int d, float *l, float *m, float *O)
 {
     constexpr int REPEAT_NUM = 1;
     cudaEvent_t start, stop;
@@ -42,14 +42,14 @@ void timingAttn(const float *Q, const float *K, const float *V, const int batch_
     CHECK_CUDA_ERROR(cudaEventRecord(start));
     for (int i = 0; i < REPEAT_NUM; ++i)
     {
-        attention::launchFlashAttentionKernel_v1(Q, K, V, O, l, m, batch_size, num_head, N, M, d);
+        attention::launchFlashAttentionKernel_v3(Q, K, V, O, l, m, batch_size, num_head, N, M, d);
     }
     CHECK_CUDA_ERROR(cudaEventRecord(stop));
     CHECK_CUDA_ERROR(cudaEventSynchronize(stop));
     float elapsed_time;
     CHECK_CUDA_ERROR(cudaEventElapsedTime(&elapsed_time, start, stop));
-    printf("alogrithm: flash attention v1 bz(%d) nh(%d) N(%d) M(%d) d(%d), elapsed_time: %g ms\n", 
-        batch_size, num_head, N, M, d, elapsed_time / REPEAT_NUM);
+    printf("alogrithm: flash attention v3 bz(%d) nh(%d) N(%d) M(%d) d(%d), elapsed_time: %g ms\n",
+           batch_size, num_head, N, M, d, elapsed_time / REPEAT_NUM);
 }
 int main(int argc, char *argv[])
 {
@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
         V[i] = ((i * 503 % 1999) * 0.01f - 10.0f); // 503是质数
     }
 
-    for (int i = 0; i < batch_size * num_head * N; ++i) 
+    for (int i = 0; i < batch_size * num_head * N; ++i)
     {
         l[i] = 0.0f;
         m[i] = -1e20f;
@@ -150,12 +150,12 @@ int main(int argc, char *argv[])
     printVec(m, (char *)("Vec m: "), N, 64, 48);
 
     CHECK_CUDA_ERROR(cudaFree(d_Q));
-    delete [] Q;
-    delete [] K;
-    delete [] V;
-    delete [] l;
-    delete [] m;
-    delete [] O;
+    delete[] Q;
+    delete[] K;
+    delete[] V;
+    delete[] l;
+    delete[] m;
+    delete[] O;
 
     return 0;
 }

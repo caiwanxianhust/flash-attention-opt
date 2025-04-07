@@ -55,8 +55,9 @@ int main(int argc, char *argv[])
 {
     constexpr int batch_size = 32;
     constexpr int num_head = 8;
-    constexpr int N = 256;
+    constexpr int N = 1024;
     constexpr int d = 1024;
+    constexpr int M = N;
 
     float *Q = new float[batch_size * num_head * N * d];
     float *K = new float[batch_size * num_head * N * d];
@@ -75,16 +76,31 @@ int main(int argc, char *argv[])
     //     O[i] = 0.0f;
     // }
 
+    // for (int i = 0; i < batch_size * num_head * N * d; ++i)
+    // {
+    //     Q[i] = i % 103 + 1.0f;
+    //     O[i] = 0.0f;
+    // }
+
+    // for (int i = 0; i < batch_size * num_head * N * d; ++i)
+    // {
+    //     K[i] = i % 257 + 2.1f;
+    //     V[i] = i % 191 + 0.9f;
+    // }
+
+    // 初始化Q矩阵
     for (int i = 0; i < batch_size * num_head * N * d; ++i)
     {
-        Q[i] = i % 103 + 1.0f;
+        // Q[i] = ((i % 200) - 100) * 0.1f; // 方案一
+        Q[i] = ((i * 997 % 2001) * 0.01f - 10.0f); // 方案二
         O[i] = 0.0f;
     }
 
-    for (int i = 0; i < batch_size * num_head * N * d; ++i)
+    // 初始化K矩阵（使用不同周期）
+    for (int i = 0; i < batch_size * num_head * M * d; ++i)
     {
-        K[i] = i % 257 + 2.1f;
-        V[i] = i % 191 + 0.9f;
+        K[i] = ((i % 211) - 105) * 0.095f;         // 211是质数
+        V[i] = ((i * 503 % 1999) * 0.01f - 10.0f); // 503是质数
     }
 
     for (int i = 0; i < batch_size * num_head * N; ++i) 

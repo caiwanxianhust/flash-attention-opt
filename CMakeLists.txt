@@ -1,7 +1,17 @@
-cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
+set(CMAKE_CUDA_ARCHITECTURES 89)
+
 project(FLASH_ATTENTION LANGUAGES CXX CUDA)
 
-set(CMAKE_CUDA_ARCHITECTURES 89)
+# 可选：二次锁定防止覆盖
+set(CMAKE_CUDA_ARCHITECTURES 89 CACHE STRING "" FORCE)
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_89,code=sm_89")
+
+
+# 检查 CUDA 版本
+if(CUDART_VERSION LESS 12000)
+    message(FATAL_ERROR "CUDA 12.0+ required for sm_89")
+endif()
 
 find_package(CUDA REQUIRED)
 

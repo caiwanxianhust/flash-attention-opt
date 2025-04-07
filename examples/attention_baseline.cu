@@ -55,31 +55,58 @@ int main(int argc, char *argv[])
 {
     constexpr int batch_size = 32;
     constexpr int num_head = 8;
-    constexpr int N = 4096;
-    constexpr int M = 256;
-    constexpr int d = 128;
+    constexpr int N = 1024;
+    constexpr int M = 1024;
+    constexpr int d = 1024;
 
     float *Q = new float[batch_size * num_head * N * d];
     float *K = new float[batch_size * num_head * M * d];
     float *V = new float[batch_size * num_head * M * d];
     float *O = new float[batch_size * num_head * N * d];
 
-    srand(1024);
+    // srand(1024);
+    // for (int i = 0; i < batch_size * num_head * N * d; ++i)
+    // {
+    //     Q[i] = (rand() / (RAND_MAX + 1.0f)) * 1.0f - 0.5f;
+    //     O[i] = 0.0f;
+    // }
+
+    // for (int i = 0; i < batch_size * num_head * M * d; ++i)
+    // {
+    //     K[i] = (rand() / (RAND_MAX + 1.0f)) * 1.0f - 0.5f;
+    //     V[i] = (rand() / (RAND_MAX + 1.0f)) * 1.0f - 0.5f;
+    // }
+
+    // for (int i = 0; i < batch_size * num_head * N * d; ++i)
+    // {
+    //     Q[i] = i % 1003 - 500.0f;
+    //     O[i] = 0.0f;
+    // }
+
+    // for (int i = 0; i < batch_size * num_head * M * d; ++i)
+    // {
+    //     K[i] = i % 2157 - 1218.1f;
+    //     V[i] = i % 191 - 100.9f;
+    // }
+
+    // 初始化Q矩阵
     for (int i = 0; i < batch_size * num_head * N * d; ++i)
     {
-        Q[i] = (rand() / (RAND_MAX + 1.0f)) * 256.0f - 128.0f;
+        // Q[i] = ((i % 200) - 100) * 0.1f; // 方案一
+        Q[i] = ((i * 997 % 2001) * 0.01f - 10.0f); // 方案二
         O[i] = 0.0f;
     }
 
+    // 初始化K矩阵（使用不同周期）
     for (int i = 0; i < batch_size * num_head * M * d; ++i)
     {
-        K[i] = (rand() / (RAND_MAX + 1.0f)) * 256.0f - 128.0f;
-        V[i] = (rand() / (RAND_MAX + 1.0f)) * 256.0f - 128.0f;
+        K[i] = ((i % 211) - 105) * 0.095f;         // 211是质数
+        V[i] = ((i * 503 % 1999) * 0.01f - 10.0f); // 503是质数
     }
 
-    // printMatrix(Q, (char *)("Matrix Q: "), N, d, 32, 32, 28, 24);
-    // printMatrix(K, (char *)("Matrix K: "), M, d, 32, 32, 28, 24);
-    // printMatrix(V, (char *)("Matrix V: "), M, d, 32, 32, 28, 24);
+    printMatrix(Q, (char *)("Matrix Q: "), N, d, 32, 32, 28, 24);
+    printMatrix(K, (char *)("Matrix K: "), M, d, 32, 32, 28, 24);
+    printMatrix(V, (char *)("Matrix V: "), M, d, 32, 32, 28, 24);
 
     float *d_Q;
     float *d_K;

@@ -298,10 +298,13 @@ namespace attention
                     // 存储第 j 行的 Q 向量与第 k 列的 s_K 向量的内积, QK^T 矩阵当前第 j 列的值
                     tmp_ml.m = blockAllReduceSum<float>(tmp_ml.m);
                     row_ml = MDFOp()(row_ml, tmp_ml);
-                    if (threadIdx.x == 0) { s_S[k] = tmp_ml.m; }
+                    if (threadIdx.x == 0)
+                    {
+                        s_S[k] = tmp_ml.m;
+                    }
                     __syncthreads();
                 }
-                __syncthreads();
+                // __syncthreads();
 
                 MD_F row_ml_new = MDFOp()(row_ml_prev, row_ml);
 
@@ -418,8 +421,11 @@ namespace attention
                     __syncwarp();
 
                     // 存储第 j 行的 Q 向量与第 k 列的 s_K 向量的内积, QK^T 矩阵当前第 j 列的值
-                    s_S[warp_id * Bc + k] = warpAllReduce<SumOp, float>(tmp_ml.m);
-                    tmp_ml.m = s_S[warp_id * Bc + k];
+                    tmp_ml.m = warpAllReduce<SumOp, float>(tmp_ml.m);
+                    if (lane_id == 0)
+                    {
+                        s_S[warp_id * Bc + k] = tmp_ml.m;
+                    }
                     row_ml = MDFOp()(row_ml, tmp_ml);
                 }
                 __syncthreads();
@@ -447,7 +453,7 @@ namespace attention
                 }
                 __syncthreads();
             }
-            __syncthreads();
+            // __syncthreads();
         }
     }
 
@@ -542,8 +548,10 @@ namespace attention
     {
         using namespace nvcuda;
 
+#pragma unroll
         for (int wmidx = 0; wmidx < WMITERS; ++wmidx)
         {
+#pragma unroll
             for (int wkidx = 0; wkidx < WKITERS; ++wkidx)
             {
                 int shm_offset = warp_row * Wr * Bd + wmidx * 16 * Bd + wkidx * 16;
@@ -551,8 +559,10 @@ namespace attention
             }
         }
 
+#pragma unroll
         for (int wnidx = 0; wnidx < WNITERS; ++wnidx)
         {
+#pragma unroll
             for (int wkidx = 0; wkidx < WKITERS; ++wkidx)
             {
                 int shm_offset = warp_col * Wc * Bd + wnidx * 16 * Bd + wkidx * 16;
@@ -560,10 +570,13 @@ namespace attention
             }
         }
 
+#pragma unroll
         for (int wmidx = 0; wmidx < WMITERS; ++wmidx)
         {
+#pragma unroll
             for (int wnidx = 0; wnidx < WNITERS; ++wnidx)
             {
+#pragma unroll
                 for (int wkidx = 0; wkidx < WKITERS; ++wkidx)
                 {
                     wmma::mma_sync(acc_frag[wmidx * WNITERS + wnidx], q_frag[wmidx * WKITERS + wkidx],
@@ -575,12 +588,14 @@ namespace attention
 
     template <int Bd, int Wc, int Wr, typename T1, typename T2, typename T3>
     __device__ void pvGemmFromSmemByWMMA(const half *__restrict__ s_V,
-        T1 *p_frag, T2 *v_frag, T3 *c_frag, const int warp_row, const int warp_col,
-        const int WMITERS, const int WNITERS, const int WKITERS)
+                                         T1 *p_frag, T2 *v_frag, T3 *c_frag, const int warp_row, const int warp_col,
+                                         const int WMITERS, const int WNITERS, const int WKITERS)
     {
         using namespace nvcuda;
+#pragma unroll
         for (int wnidx = 0; wnidx < WNITERS; ++wnidx)
         {
+#pragma unroll
             for (int wkidx = 0; wkidx < WKITERS; ++wkidx)
             {
                 int shm_offset = warp_col * Wc + wnidx * 16 + wkidx * 16 * Bd;
@@ -588,10 +603,13 @@ namespace attention
             }
         }
 
+#pragma unroll
         for (int wmidx = 0; wmidx < WMITERS; ++wmidx)
         {
+#pragma unroll
             for (int wnidx = 0; wnidx < WNITERS; ++wnidx)
             {
+#pragma unroll
                 for (int wkidx = 0; wkidx < WKITERS; ++wkidx)
                 {
                     wmma::mma_sync(c_frag[wmidx * WNITERS + wnidx], p_frag[wmidx * WKITERS + wkidx],
@@ -603,12 +621,13 @@ namespace attention
 
     template <int Bc, int Wc, int Wr, typename T>
     __device__ void loadSFromSmemToReg(const half *__restrict__ s_S, T *a_frag, const int warp_row, const int warp_col,
-        const int WMITERS, const int WNITERS, const int WKITERS)
+                                       const int WMITERS, const int WNITERS, const int WKITERS)
     {
         using namespace nvcuda;
-
+#pragma unroll
         for (int wmidx = 0; wmidx < WMITERS; ++wmidx)
         {
+#pragma unroll
             for (int wkidx = 0; wkidx < WKITERS; ++wkidx)
             {
                 int shm_offset = warp_row * Wr * Bc + wmidx * 16 * Bc + wkidx * 16;
@@ -622,12 +641,15 @@ namespace attention
                                       const int WMITERS, const int WNITERS, const int WKITERS, const float softmax_scale)
     {
         using namespace nvcuda;
-        // 从 s_S 中取出元素，累加矩阵计算结果，再写入 s_S
+// 从 s_S 中取出元素，累加矩阵计算结果，再写入 s_S
+#pragma unroll
         for (int wmidx = 0; wmidx < WMITERS; ++wmidx)
         {
+#pragma unroll
             for (int wnidx = 0; wnidx < WNITERS; ++wnidx)
             {
                 int shm_offset = warp_row * Wr * Bc + warp_col * Wc + wmidx * 16 * Bc + wnidx * 16;
+#pragma unroll
                 for (int idx = 0; idx < acc_frag[wmidx * WNITERS + wnidx].num_elements; ++idx)
                 {
                     acc_frag[wmidx * WNITERS + wnidx].x[idx] *= softmax_scale;
@@ -642,8 +664,10 @@ namespace attention
                                      const int WMITERS, const int WNITERS, const int WKITERS)
     {
         using namespace nvcuda;
+#pragma unroll
         for (int wmidx = 0; wmidx < WMITERS; ++wmidx)
         {
+#pragma unroll
             for (int wnidx = 0; wnidx < WNITERS; ++wnidx)
             {
                 int shm_offset = warp_row * Wr * Bd + warp_col * Wc + wmidx * 16 * Bd + wnidx * 16;
@@ -690,6 +714,8 @@ namespace attention
         // block 内 warp 二维分布的 id
         int warp_row = (threadIdx.x >> 5) / (Bc / Wc);
         int warp_col = (threadIdx.x >> 5) % (Bc / Wc);
+        int warp_id = (threadIdx.x >> 5);
+        int lane_id = (threadIdx.x & 31);
 
         // 单个 warp 处理层面 M、N、K 方向每个 warp 迭代次数
         constexpr int WMITERS = Wr / 16;
@@ -698,15 +724,13 @@ namespace attention
 
         using FragAType = wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major>;
         using FragBType = wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::col_major>;
-        using FragCHalfType = wmma::fragment<wmma::accumulator, 16, 16, 16, half>;
         using FragCFloatType = wmma::fragment<wmma::accumulator, 16, 16, 16, float>;
         using FragVType = wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major>;
         // 当前 warp 内的矩阵乘法片段
-        FragAType a_frag[WMITERS * WKITERS];       // 用于存储矩阵 Q 和 QK 的分片
-        FragBType b_frag[WNITERS * WKITERS];       // 用于存储矩阵 K 的分片
+        FragAType a_frag[WMITERS * WKITERS];        // 用于存储矩阵 Q 和 QK 的分片
+        FragBType b_frag[WNITERS * WKITERS];        // 用于存储矩阵 K 的分片
         FragCFloatType acc_frag[WMITERS * WNITERS]; // 用于存储矩阵 QK 的分片
-        FragCFloatType c_frag[WMITERS * WNITERS];  // 用于存储矩阵 s_S 的分片
-        FragVType v_frag[WKITERS];                 // 用于存储矩阵 V 的分片
+        FragVType v_frag[WNITERS * WKITERS];        // 用于存储矩阵 V 的分片
 
         // 对 K|V 在 M 维度分组，每组长度为 Bc，共分为 Tc 组
         for (int i = 0; i < M; i += Bc)
@@ -714,10 +738,12 @@ namespace attention
             // 对 Q 在 N 维度分组，每组长度为 Br，共分为 Tr 组
             for (int j = 0; j < N; j += Br)
             {
-                // 初始化 QK 矩阵
-                for (int s = threadIdx.x; s < Br * Bc; s += blockDim.x)
+#pragma unroll
+                for (int k = threadIdx.x; k < Br; k += blockDim.x)
                 {
-                    s_S[s] = 0.0f;
+                    // 上一个 Bc 组结束时每行的 m 和 l
+                    row_ml_prev[k] = {m[lm_offset + j + k], l[lm_offset + j + k]};
+                    row_ml[k] = {-1e20f, 0.0f};
                 }
                 __syncthreads();
 #pragma unroll
@@ -732,24 +758,15 @@ namespace attention
                     __syncthreads();
 
                     gemmFromSmemByWMMA<Bd, Wc, Wr, FragAType, FragBType, FragCFloatType>(s_Q_half, s_K_half, a_frag, b_frag, acc_frag,
-                                                                                        warp_row, warp_col, WMITERS, WNITERS, WKITERS);
+                                                                                         warp_row, warp_col, WMITERS, WNITERS, WKITERS);
                     __syncthreads();
                 }
                 StoreQKGEMMToSmem<Bc, Wc, Wr, FragCFloatType>(s_S, acc_frag, warp_row, warp_col, WMITERS, WNITERS, WKITERS, softmax_scale);
                 __syncthreads();
-               
-                for (int k = threadIdx.x; k < Br; k += blockDim.x)
-                {
-                    // 上一个 Bc 组结束时每行的 m 和 l
-                    row_ml_prev[k] = {m[lm_offset + j + k], l[lm_offset + j + k]};
-                    row_ml[k] = {-1e20f, 0.0f};
-                }
-                __syncthreads();
 
-                // 对 s_S[Br, Bc] 求 softmax，每个 warp 计算一行
-                int warp_id = (threadIdx.x >> 5);
-                int lane_id = (threadIdx.x & 31);
-                // MD_F row_ml_tmp = {-1e20f, 0.0f};
+// 对 s_S[Br, Bc] 求 softmax，每个 warp 计算一行
+// MD_F row_ml_tmp = {-1e20f, 0.0f};
+#pragma unroll
                 for (int s = warp_id; s < Br; s += (blockDim.x >> 5))
                 {
                     MD_F row_ml_tmp = {-1e20f, 0.0f};
@@ -759,12 +776,15 @@ namespace attention
                         row_ml_tmp = MDFOp()(row_ml_tmp, tmp_ml);
                     }
                     __syncwarp();
-                    
+
                     // 得到 s_S[Br, Bc] 每一行的 m 和 l
                     row_ml_tmp = warpAllReduce(row_ml_tmp);
-                    if (lane_id == 0) { row_ml[s] = row_ml_tmp; }
-                    // 更新 m 和 l
-                    if (lane_id == 0) { row_ml_new[s] = MDFOp()(row_ml_prev[s], row_ml_tmp); }
+                    if (lane_id == 0)
+                    {
+                        row_ml[s] = row_ml_tmp;
+                        row_ml_new[s] = MDFOp()(row_ml_prev[s], row_ml_tmp);
+                    }
+
                     // 更新 s_S[Br, Bc]
                     for (int k = lane_id; k < Bc; k += 32)
                     {
@@ -774,41 +794,35 @@ namespace attention
                 __syncthreads();
 
                 loadSFromSmemToReg<Bc, Wc, Wr, FragAType>(s_S_half, a_frag, warp_row, warp_col, WMITERS, WNITERS, WKITERS);
-                
+
                 // 计算 s_S[Br, Bc] * s_V[Bc, Bd]
                 for (int k = 0; k < d; k += Bd)
                 {
                     for (int s = 0; s < WMITERS * WNITERS; ++s)
                     {
-                        wmma::fill_fragment(c_frag[s], 0.0f);
+                        wmma::fill_fragment(acc_frag[s], 0.0f);
                     }
                     loadVFromGmemAndConvertToHalf<Bc, Bd>(V, d, s_V_half, kv_offset + i * d + k);
-                    
+
                     __syncthreads();
-                    pvGemmFromSmemByWMMA<Bd, Wc, Wr, FragAType, FragVType, FragCFloatType>(s_V_half, 
-                        a_frag, v_frag, c_frag, warp_row, warp_col, WMITERS, WNITERS, WKITERS);
-                    StoreOGEMMToSmem<Bd, Wc, Wr, FragCFloatType>(s_O, c_frag, warp_row, warp_col, WMITERS, WNITERS, WKITERS);
-                   
+                    pvGemmFromSmemByWMMA<Bd, Wc, Wr, FragAType, FragVType, FragCFloatType>(s_V_half,
+                                                                                           a_frag, v_frag, acc_frag, warp_row, warp_col, WMITERS, WNITERS, WKITERS);
+                    StoreOGEMMToSmem<Bd, Wc, Wr, FragCFloatType>(s_O, acc_frag, warp_row, warp_col, WMITERS, WNITERS, WKITERS);
+
                     __syncthreads();
-    
+
                     for (int s = warp_id; s < Br; s += (blockDim.x >> 5))
                     {
                         for (int t = lane_id; t < Bd; t += 32)
                         {
                             // 更新 O 矩阵
-                            O[qo_offset + (j + s) * d + k + t] = 1.0f / row_ml_new[s].d * (row_ml_prev[s].d * __expf(row_ml_prev[s].m - row_ml_new[s].m) * O[qo_offset + (j + s) * d + k + t] +
-                                                                 __expf(row_ml[s].m - row_ml_new[s].m) * s_O[s * Bd + t]);
+                            O[qo_offset + (j + s) * d + k + t] = 1.0f / row_ml_new[s].d * (row_ml_prev[s].d * __expf(row_ml_prev[s].m - row_ml_new[s].m) * O[qo_offset + (j + s) * d + k + t] + __expf(row_ml[s].m - row_ml_new[s].m) * s_O[s * Bd + t]);
                         }
                     }
-                    __syncthreads();
-                    for (int s = threadIdx.x; s < Br * Bd; s+=blockDim.x)
-                    {
-                        s_O[s] = 0.0f;
-                    }
-                    __syncthreads();
                 }
 
-                // 写入当前 Bc 组的 l 和 m
+// 写入当前 Bc 组的 l 和 m
+#pragma unroll
                 for (int k = threadIdx.x; k < Br; k += blockDim.x)
                 {
                     l[lm_offset + j + k] = row_ml_new[k].d;
@@ -816,7 +830,6 @@ namespace attention
                 }
                 __syncthreads();
             }
-            __syncthreads();
         }
     }
 

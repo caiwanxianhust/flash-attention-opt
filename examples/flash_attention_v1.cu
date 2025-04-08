@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
     constexpr int num_head = 8;
     constexpr int N = 1024;
     constexpr int M = 1024;
-    constexpr int d = 1024;
+    constexpr int d = 256;
 
     float *Q = new float[batch_size * num_head * N * d];
     float *K = new float[batch_size * num_head * M * d];

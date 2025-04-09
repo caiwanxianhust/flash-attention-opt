@@ -443,6 +443,133 @@ void launchFlashAttentionKernel_v1(const float *__restrict__ Q, const float *__r
 ## 5 Flash Attention v2：每次循环处理 Br 行计算任务
 前面的 Kernel 每次循环只能计算一行结果，针对序列长度较长，而隐藏层维度较小的场景，性能可能偏低，那么我们是否可以改写一下一次性计算多行呢？当然可以，在不改变整体计算思路的情况下，只需要满足共享内存容量不溢出即可。
 
+```cpp
+/**
+ * grid( num_head, batch_size )
+ * block( BLOCK_SIZE )
+ * Q\O: [batch_size, num_head, N, d]
+ * K\V: [batch_size, num_head, M, d]
+ * l: [batch_size, num_head, N, 1]
+ * m: [batch_size, num_head, N, 1]
+ */
+template <int Bc, int Br>
+__global__ void flashAttentionKernel_v2(const float *__restrict__ Q, const float *__restrict__ K, const float *__restrict__ V,
+                                        float *__restrict__ O, float *__restrict__ l, float *__restrict__ m,
+                                        const int N, const int M, const int d, const float softmax_scale)
+{
+    const int qo_offset = (blockIdx.y * gridDim.x + blockIdx.x) * N * d;
+    const int kv_offset = (blockIdx.y * gridDim.x + blockIdx.x) * M * d;
+    const int lm_offset = (blockIdx.y * gridDim.x + blockIdx.x) * N;
+
+    extern __shared__ float s_ptr[];
+    float *s_Q = s_ptr;        // [Br, d]
+    float *s_K = s_Q + Br * d; // [Bc, d]
+    float *s_V = s_K + Bc * d; // [Bc, d]
+    float *s_S = s_V + Bc * d; // [Br, Bc]
+
+    __shared__ MD_F row_ml_prev[Br];
+
+    const int warp_id = threadIdx.x / 32;
+    const int lane_id = threadIdx.x & 31;
+
+    // 对 K|V 在 M 维度分组，每组长度为 Bc，共分为 Tc 组
+    for (int i = 0; i < M; i += Bc)
+    {
+        // 加载 [Bc, d] 数据到 s_K 和 s_Vs_V
+        for (int j = threadIdx.x; j < Bc * d; j += blockDim.x)
+        {
+            s_K[j] = K[kv_offset + i * d + j];
+            s_V[j] = V[kv_offset + i * d + j];
+        }
+        __syncthreads();
+
+        // 遍历 Q 的 N 列，每次处理一列
+        for (int j = 0; j < N; j += Br)
+        {
+            // 加载 Br 行数据到 s_Q
+            for (int k = threadIdx.x; k < Br * d; k += blockDim.x)
+            {
+                s_Q[k] = Q[qo_offset + j * d + k];
+            }
+            // 上一个 Bc 组结束时每行的 m 和 l
+            if (threadIdx.x < Br)
+            {
+                row_ml_prev[threadIdx.x] = {m[lm_offset + j + threadIdx.x], l[lm_offset + j + threadIdx.x]};
+            }
+            __syncthreads();
+
+            // 存储当前 warp 对应的第 j+warp_id 行的 l 和 m
+            MD_F row_ml = {-1e20f, 0.0f};
+// 遍历 K^T 的 Bc 列
+#pragma unroll
+            for (int k = 0; k < Bc; ++k)
+            {
+                MD_F tmp_ml = {0.0f, 1.0f};
+                // 计算 QK^T
+                for (int x = lane_id; x < d; x += 32)
+                {
+                    tmp_ml.m += s_Q[warp_id * d + x] * s_K[k * d + x];
+                }
+                tmp_ml.m *= softmax_scale;
+                __syncwarp();
+
+                // 存储第 j 行的 Q 向量与第 k 列的 s_K 向量的内积, QK^T 矩阵当前第 j 列的值
+                tmp_ml.m = warpAllReduce<SumOp, float>(tmp_ml.m);
+                if (lane_id == 0)
+                {
+                    s_S[warp_id * Bc + k] = tmp_ml.m;
+                }
+                row_ml = MDFOp()(row_ml, tmp_ml);
+            }
+            __syncthreads();
+
+            MD_F row_ml_new = MDFOp()(row_ml_prev[warp_id], row_ml);
+
+            // 遍历矩阵 O 的 d 维度，O = softmax(QK^T)V
+            for (int k = lane_id; k < d; k += 32)
+            {
+                float pv = 0.0f;
+#pragma unroll
+                for (int x = 0; x < Bc; ++x)
+                {
+                    pv += __expf(s_S[warp_id * Bc + x] - row_ml.m) * s_V[x * d + k];
+                }
+                // 更新 O 矩阵
+                O[qo_offset + (j + warp_id) * d + k] = 1.0f / row_ml_new.d * (row_ml_prev[warp_id].d * __expf(row_ml_prev[warp_id].m - row_ml_new.m) * O[qo_offset + (j + warp_id) * d + k] + __expf(row_ml.m - row_ml_new.m) * pv);
+            }
+
+            // 写入当前 Bc 组的 l 和 m
+            if (lane_id == 0)
+            {
+                l[lm_offset + j + warp_id] = row_ml_new.d;
+                m[lm_offset + j + warp_id] = row_ml_new.m;
+            }
+            __syncthreads();
+        }
+        // __syncthreads();
+    }
+}
+
+void launchFlashAttentionKernel_v2(const float *__restrict__ Q, const float *__restrict__ K, const float *__restrict__ V,
+                                    float *__restrict__ O, float *__restrict__ l, float *__restrict__ m,
+                                    const int batch_size, const int num_head, const int N, const int M, const int d, cudaStream_t stream)
+{
+    constexpr int Bc = 2;
+    constexpr int Br = 4;
+    assert(M % Bc == 0);
+    const float softmax_scale = 1.0f / sqrtf((float)d);
+
+    const int sram_size = (Br * d + 2 * Bc * d + Br * Bc) * sizeof(float);
+    int max_sram_size;
+    cudaDeviceGetAttribute(&max_sram_size, cudaDevAttrMaxSharedMemoryPerBlock, 0);
+    printf("Max shared memory: %g KB, requested shared memory: %g KB \n", max_sram_size / 1024.0f, sram_size / 1024.0f);
+
+    dim3 grid_dim(num_head, batch_size);
+    dim3 block_dim(Br * 32);
+    flashAttentionKernel_v2<Bc, Br><<<grid_dim, block_dim, sram_size, stream>>>(Q, K, V, O, l, m, N, M, d, softmax_scale);
+}
+```
+
 这次我们一次加载 `Bc` 行 K\V 矩阵元素和 `Br` 行 Q 矩阵元素到共享内存，在 Q 矩阵序列维度的一次循环中，我们利用一个 block 内所有线程计算 `Br` 行结果。这样的话我们总共需要 `(Br * d + 2 * Bc * d + Br * Bc) * sizeof(float)` 的共享容量。这里 `Bc` 我们设置为 `2`，`Br` 设置为 `4`，在隐藏层维度 `d` 为 `1024` 时总共需要约 `32 KB` 共享内存，如果 `d` 取更大的值，则 `Bc` 或 `Br` 要做相应缩减。`block_size` 设置为 `Br * 32`，即每个 warp 处理一行计算，合理利用 warp 内规约机制。
 
 首先还是两层循环，加载 Q\K\V 矩阵元素到共享内存，保证基本的全局内存合并访问和共享内存不出现 bank conflict。从全局内存中加载上一个分块的 `m`、`l`（相当于前面公式里的 $d$） 变量记为 `row_ml_prev`，并同步 block。
@@ -511,7 +638,7 @@ void launchFlashAttentionKernel_v3(const float *__restrict__ Q, const float *__r
 - `row_ml[Br]`：存储当前分片处理的所有行的 `m` 和 `l`
 - `row_ml_new[Br]`：存储截至当前分片的所有行的 `m` 和 `l`
 
-要说明的是，为什么出现了这么多 half 类型，是因为使用了 WMMA api 中 `half * half -> float` 模板，在 Ampere 架构中 tensor core 其实也支持 `tf32 * tf32 -> float`，但是 `tf32` 转 `float` 还需要专门处理，考虑到所以干脆就用 `tf32 * tf32 -> float` 了。
+要说明的是，为什么出现了这么多 half 类型，是因为使用了 WMMA api 中 `half * half -> float` 模板，在 Ampere 架构中 tensor core 其实也支持 `tf32 * tf32 -> float`，但是 `tf32` 转 `float` 还需要专门处理，所以干脆就不用 `tf32 * tf32 -> float` 了。
 
 由于我们的计算任务是要具体分配到 warp 级别的，所以 Kernel 内定义了一些 warp 相关的索引：
 

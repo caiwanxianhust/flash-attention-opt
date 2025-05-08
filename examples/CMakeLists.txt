@@ -51,3 +51,7 @@ target_link_libraries(flash_attention_v2 PUBLIC attention)
 add_executable(flash_attention_v3 ${sample_flash_attention_v3_files})
 target_compile_features(flash_attention_v3 PUBLIC cxx_std_14)
 target_link_libraries(flash_attention_v3 PUBLIC attention)
+
+add_executable(flash_attention_v4 ${sample_flash_attention_v3_files})
+target_compile_features(flash_attention_v4 PUBLIC cxx_std_14)
+target_link_libraries(flash_attention_v4 PUBLIC attention)

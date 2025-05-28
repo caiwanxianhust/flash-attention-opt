@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
     constexpr int num_head = 8;
     constexpr int N = 1024;
     constexpr int M = 1024;
-    constexpr int d = 256;
+    constexpr int d = 128;
 
     float *Q = new float[batch_size * num_head * N * d];
     float *K = new float[batch_size * num_head * M * d];
@@ -80,18 +80,18 @@ int main(int argc, char *argv[])
     // }
 
     // 初始化Q矩阵
-    for (int i = 0; i < batch_size * num_head * N * d; ++i)
+    for (size_t i = 0; i < batch_size * num_head * N * d; ++i)
     {
         // Q[i] = ((i % 200) - 100) * 0.1f; // 方案一
-        Q[i] = ((i * 997 % 2001) * 0.01f - 10.0f); // 方案二
+        Q[i] = static_cast<float>(static_cast<int>(i * 41 % 2001) * 0.01f - 10.0f); // 方案二
         O[i] = 0.0f;
     }
 
     // 初始化K矩阵（使用不同周期）
-    for (int i = 0; i < batch_size * num_head * M * d; ++i)
+    for (size_t i = 0; i < batch_size * num_head * M * d; ++i)
     {
-        K[i] = ((i % 211) - 105) * 0.095f;         // 211是质数
-        V[i] = ((i * 503 % 1999) * 0.01f - 10.0f); // 503是质数
+        K[i] = static_cast<float>((static_cast<int>(i % 211) - 105) * 0.095f);         // 211是质数
+        V[i] = static_cast<float>(static_cast<int>(i * 53 % 1999) * 0.01f - 10.0f); // 503是质数
     }
 
 

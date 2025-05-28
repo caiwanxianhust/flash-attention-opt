@@ -17,6 +17,12 @@ set (sample_flash_attention_v2_files
 set (sample_flash_attention_v3_files
     flash_attention_v3.cu
 )
+set (sample_flash_attention_v4_files
+    flash_attention_v4.cu
+)
+set (sample_flash_attention_v5_files
+    flash_attention_v5.cu
+)
 
 set (SAMPLES_HEADER_DIR
     ${PROJECT_SOURCE_DIR}/flash_attention
@@ -52,6 +58,15 @@ add_executable(flash_attention_v3 ${sample_flash_attention_v3_files})
 target_compile_features(flash_attention_v3 PUBLIC cxx_std_14)
 target_link_libraries(flash_attention_v3 PUBLIC attention)
 
-add_executable(flash_attention_v4 ${sample_flash_attention_v3_files})
+add_executable(flash_attention_v4 ${sample_flash_attention_v4_files})
 target_compile_features(flash_attention_v4 PUBLIC cxx_std_14)
 target_link_libraries(flash_attention_v4 PUBLIC attention)
+
+add_executable(flash_attention_v5 ${sample_flash_attention_v5_files})
+target_compile_features(flash_attention_v5 PUBLIC cxx_std_14)
+target_link_libraries(flash_attention_v5 PUBLIC attention)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(flash_attention_v5 PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
+else()
+    target_compile_options(flash_attention_v5 PRIVATE -lineinfo)
+endif()

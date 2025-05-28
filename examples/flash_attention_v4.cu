@@ -48,7 +48,7 @@ void timingAttn(const float *Q, const float *K, const float *V, const int batch_
     CHECK_CUDA_ERROR(cudaEventSynchronize(stop));
     float elapsed_time;
     CHECK_CUDA_ERROR(cudaEventElapsedTime(&elapsed_time, start, stop));
-    printf("alogrithm: flash attention v3 bz(%d) nh(%d) N(%d) M(%d) d(%d), elapsed_time: %g ms\n",
+    printf("alogrithm: flash attention v4 bz(%d) nh(%d) N(%d) M(%d) d(%d), elapsed_time: %g ms\n",
            batch_size, num_head, N, M, d, elapsed_time / REPEAT_NUM);
 }
 int main(int argc, char *argv[])
@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
     constexpr int num_head = 8;
     constexpr int N = 1024;
     constexpr int M = 1024;
-    constexpr int d = 256;
+    constexpr int d = 128;
 
     float *Q = new float[batch_size * num_head * N * d];
     float *K = new float[batch_size * num_head * M * d];
@@ -92,18 +92,18 @@ int main(int argc, char *argv[])
     // }
 
     // 初始化Q矩阵
-    for (int i = 0; i < batch_size * num_head * N * d; ++i)
+    for (size_t i = 0; i < batch_size * num_head * N * d; ++i)
     {
         // Q[i] = ((i % 200) - 100) * 0.1f; // 方案一
-        Q[i] = ((i * 997 % 2001) * 0.01f - 10.0f); // 方案二
+        Q[i] = static_cast<float>(static_cast<int>(i * 41 % 2001) * 0.01f - 10.0f); // 方案二
         O[i] = 0.0f;
     }
 
     // 初始化K矩阵（使用不同周期）
-    for (int i = 0; i < batch_size * num_head * M * d; ++i)
+    for (size_t i = 0; i < batch_size * num_head * M * d; ++i)
     {
-        K[i] = ((i % 211) - 105) * 0.095f;         // 211是质数
-        V[i] = ((i * 503 % 1999) * 0.01f - 10.0f); // 503是质数
+        K[i] = static_cast<float>((static_cast<int>(i % 211) - 105) * 0.095f);         // 211是质数
+        V[i] = static_cast<float>(static_cast<int>(i * 53 % 1999) * 0.01f - 10.0f); // 503是质数
     }
 
     for (int i = 0; i < batch_size * num_head * N; ++i)
@@ -142,12 +142,12 @@ int main(int argc, char *argv[])
     timingAttn(d_Q, d_K, d_V, batch_size, num_head, N, M, d, d_l, d_m, d_O);
 
     CHECK_CUDA_ERROR(cudaMemcpy(O, d_O, sizeof(float) * batch_size * num_head * N * d, cudaMemcpyDeviceToHost));
-    CHECK_CUDA_ERROR(cudaMemcpy(l, d_l, sizeof(float) * batch_size * num_head * N, cudaMemcpyDeviceToHost));
-    CHECK_CUDA_ERROR(cudaMemcpy(m, d_m, sizeof(float) * batch_size * num_head * N, cudaMemcpyDeviceToHost));
+    // CHECK_CUDA_ERROR(cudaMemcpy(l, d_l, sizeof(float) * batch_size * num_head * N, cudaMemcpyDeviceToHost));
+    // CHECK_CUDA_ERROR(cudaMemcpy(m, d_m, sizeof(float) * batch_size * num_head * N, cudaMemcpyDeviceToHost));
 
     printMatrix(O, (char *)("Matrix output: "), N, d, 32, 32, 28, 24);
-    printVec(l, (char *)("Vec l: "), N, 64, 48);
-    printVec(m, (char *)("Vec m: "), N, 64, 48);
+    // printVec(l, (char *)("Vec l: "), N, 64, 48);
+    // printVec(m, (char *)("Vec m: "), N, 64, 48);
 
     CHECK_CUDA_ERROR(cudaFree(d_Q));
     delete[] Q;

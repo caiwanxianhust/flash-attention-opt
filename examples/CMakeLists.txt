@@ -23,6 +23,9 @@ set (sample_flash_attention_v4_files
 set (sample_flash_attention_v5_files
     flash_attention_v5.cu
 )
+set (sample_flash_attention_v6_files
+    flash_attention_v6.cu
+)
 
 set (SAMPLES_HEADER_DIR
     ${PROJECT_SOURCE_DIR}/flash_attention
@@ -70,3 +73,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 else()
     target_compile_options(flash_attention_v5 PRIVATE -lineinfo)
 endif()
+
+add_executable(flash_attention_v6 ${sample_flash_attention_v6_files})
+target_compile_features(flash_attention_v6 PUBLIC cxx_std_14)
+target_link_libraries(flash_attention_v6 PUBLIC attention)

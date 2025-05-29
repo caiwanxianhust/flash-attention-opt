@@ -31,4 +31,7 @@ namespace attention {
     void launchFlashAttentionKernel_v5(const half* __restrict__ Q, const half* __restrict__ K, const half* __restrict__ V,
         half* __restrict__ O, const int batch_size, const int num_head, const int N, const int M, const int d, cudaStream_t stream = 0);
 
+    void launchFlashAttentionKernel_v6(const half* __restrict__ Q, const half* __restrict__ K, const half* __restrict__ V,
+        half* __restrict__ O, const int batch_size, const int num_head, const int N, const int M, const int d, cudaStream_t stream = 0);
+
 } // namespace attention

@@ -1226,7 +1226,7 @@ namespace attention {
             }
 #endif
 
-            // 计算 QK 矩阵，每次计算尺寸为 16x16x16，
+            // 计算 QKV 矩阵，每次计算尺寸为 16x16x16，
             for (int k = 0; k < d; k += Bd) {
                 // 初始化 RC
                 RC[0] = 0;
@@ -1273,7 +1273,7 @@ namespace attention {
                 }
             }
 
-            // 更新 row_ml_new
+            // 更新 row_ml_prev
             if (lane_id < Br) {
                 row_ml_prev[warp_id * Br + lane_id] = row_ml_new[warp_id * Br + lane_id];
             }
@@ -1375,7 +1375,7 @@ namespace attention {
         // load [4 * Br, d] 的 Q 矩阵分片到 s_Q，每个 warp load [Br, d]，每次 load 8 个 half
         // s_Q 的宽度是 d，当大于 64 的时候 swizzle_B 应该取 3，当前按 d = 128 考虑
         for (int i = (lane_id << 3); i < Br * d; i += (32 << 3)) {
-            uint32_t dst_addr = swizzle<3, 3, 3>(i);
+            uint32_t dst_addr = swizzle<3, 3, 4>(i);
             reinterpret_cast<float4*>(s_Q + warp_id * Br * d + dst_addr)[0] = reinterpret_cast<const float4*>(Q + qo_offset + i)[0];
         }
         __syncwarp();
@@ -1408,7 +1408,7 @@ namespace attention {
             // load [Bc, d] 的 K 矩阵分片到 s_K，整个 block 一起 load [Br, d]，每次 load 8 个 half
             // s_K s_V 的宽度是 d，当大于 64 的时候 swizzle_B 应该取 3，当前按 d = 128 考虑
             for (int j = (threadIdx.x << 3); j < Bc * d; j += (blockDim.x << 3)) {
-                uint32_t dst_addr = swizzle<3, 3, 3>(j);
+                uint32_t dst_addr = swizzle<3, 3, 4>(j);
                 reinterpret_cast<float4*>(s_K + dst_addr)[0] = reinterpret_cast<const float4*>(K + kv_offset + i * d + j)[0];
                 reinterpret_cast<float4*>(s_V + dst_addr)[0] = reinterpret_cast<const float4*>(V + kv_offset + i * d + j)[0];
             }
@@ -1435,7 +1435,7 @@ namespace attention {
                 // 从 s_Q load 16x16 矩阵分片到 RA，使用 ldmatrix.sync.aligned.x4.m8n8.shared.b16 指令
                 // warp 内每个线程都需要传入一个地址
                 uint32_t src_addr = k + (lane_id % 16) * d + (lane_id / 16) * 8;
-                uint32_t dst_addr = swizzle<3, 3, 3>(src_addr);
+                uint32_t dst_addr = swizzle<3, 3, 4>(src_addr);
                 LDMATRIX_X4(RA[0], RA[1], RA[2], RA[3], s_Q + warp_id * Br * d + dst_addr);
 #if 0
                 if (lane_id < 12 && warp_id == 0 && blockIdx.x == 0 && blockIdx.y == 0 && blockIdx.z == 0 && i == 0 && k == 0) {
@@ -1458,7 +1458,7 @@ namespace attention {
                 // 此时可以认为 4 个子矩阵是行主序排布的，子矩阵内部元素列主序排布
                 // 子矩阵偏移量 = ((lane_id / 8) % 2) * 8 + (lane_id / 16) * d * 8)
                 src_addr = k + (lane_id % 8) * d + ((lane_id / 8) % 2) * 8 + (lane_id / 16) * d * 8;
-                dst_addr = swizzle<3, 3, 3>(src_addr);
+                dst_addr = swizzle<3, 3, 4>(src_addr);
                 LDMATRIX_X4(RB[0], RB[1], RB[2], RB[3], s_K + dst_addr);
 #if 0
                 if (lane_id < 32 && warp_id == 0 && blockIdx.x == 0 && blockIdx.y == 0 && blockIdx.z == 0 && i == 0 && k == 0) {
@@ -1560,7 +1560,7 @@ namespace attention {
                 // 从 s_V load 16x16 矩阵分片到 RB，使用 ldmatrix.sync.aligned.x4.trans.m8n8.shared.b16 指令
                 // warp 内每个线程都需要传入一个地址
                 uint32_t src_addr = k + (lane_id % 16) * d + (lane_id / 16) * 8;
-                uint32_t dst_addr = swizzle<3, 3, 3>(src_addr);
+                uint32_t dst_addr = swizzle<3, 3, 4>(src_addr);
                 LDMATRIX_X4_T(RB[0], RB[1], RB[2], RB[3], s_V + dst_addr);
 
                 MMA_M16N8K16_F16F16F16F16(RC[0], RC[1], RA[0], RA[1], RA[2], RA[3], RB[0], RB[1], RC[0], RC[1]);

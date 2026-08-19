@@ -42,7 +42,7 @@ void timingAttn(const float *Q, const float *K, const float *V, const int batch_
     CHECK_CUDA_ERROR(cudaEventRecord(start));
     for (int i = 0; i < REPEAT_NUM; ++i)
     {
-        attention::launchAttentionBaseline(Q, K, V, QK, QK_softmax, O, batch_size, num_head, N, M, d);
+        launchAttentionBaseline(Q, K, V, QK, QK_softmax, O, batch_size, num_head, N, M, d);
     }
     CHECK_CUDA_ERROR(cudaEventRecord(stop));
     CHECK_CUDA_ERROR(cudaEventSynchronize(stop));

@@ -45,7 +45,7 @@ void timingAttn(const QKVType *Q, const QKVType *K, const QKVType *V, const int 
     CHECK_CUDA_ERROR(cudaEventRecord(start));
     for (int i = 0; i < REPEAT_NUM; ++i)
     {
-        attention::launchFlashAttentionKernel_v5(Q, K, V, O, batch_size, num_head, N, M, d);
+        launch_flash_attn_v2_mma_kernel(Q, K, V, O, batch_size, num_head, N, M, d);
     }
     CHECK_CUDA_ERROR(cudaEventRecord(stop));
     CHECK_CUDA_ERROR(cudaEventSynchronize(stop));

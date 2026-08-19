@@ -42,13 +42,13 @@ void timingAttn(const float *Q, const float *K, const float *V, const int batch_
     CHECK_CUDA_ERROR(cudaEventRecord(start));
     for (int i = 0; i < REPEAT_NUM; ++i)
     {
-        attention::launchFlashAttentionKernel_v1(Q, K, V, O, l, m, batch_size, num_head, N, M, d);
+        launch_flash_attn_v1_tiling_warp_parallel_kernel(Q, K, V, O, l, m, batch_size, num_head, N, M, d);
     }
     CHECK_CUDA_ERROR(cudaEventRecord(stop));
     CHECK_CUDA_ERROR(cudaEventSynchronize(stop));
     float elapsed_time;
     CHECK_CUDA_ERROR(cudaEventElapsedTime(&elapsed_time, start, stop));
-    printf("alogrithm: flash attention v1 bz(%d) nh(%d) N(%d) M(%d) d(%d), elapsed_time: %g ms\n", 
+    printf("alogrithm: flash attention v2 bz(%d) nh(%d) N(%d) M(%d) d(%d), elapsed_time: %g ms\n", 
         batch_size, num_head, N, M, d, elapsed_time / REPEAT_NUM);
 }
 int main(int argc, char *argv[])
@@ -79,18 +79,6 @@ int main(int argc, char *argv[])
     //     V[i] = (rand() / (RAND_MAX + 1.0f)) * 1.0f - 0.5f;
     // }
 
-    // for (int i = 0; i < batch_size * num_head * N * d; ++i)
-    // {
-    //     Q[i] = i % 1003 - 500.0f;
-    //     O[i] = 0.0f;
-    // }
-
-    // for (int i = 0; i < batch_size * num_head * M * d; ++i)
-    // {
-    //     K[i] = i % 2157 - 1218.1f;
-    //     V[i] = i % 191 - 100.9f;
-    // }
-
     // 初始化Q矩阵
     for (size_t i = 0; i < batch_size * num_head * N * d; ++i)
     {
@@ -106,15 +94,16 @@ int main(int argc, char *argv[])
         V[i] = static_cast<float>(static_cast<int>(i * 53 % 1999) * 0.01f - 10.0f); // 503是质数
     }
 
+
     for (int i = 0; i < batch_size * num_head * N; ++i) 
     {
         l[i] = 0.0f;
         m[i] = -1e20f;
     }
 
-    printMatrix(Q, (char *)("Matrix Q: "), N, d, 32, 32, 28, 24);
-    printMatrix(K, (char *)("Matrix K: "), M, d, 32, 32, 28, 24);
-    printMatrix(V, (char *)("Matrix V: "), M, d, 32, 32, 28, 24);
+    // printMatrix(Q, (char *)("Matrix Q: "), N, d, 32, 32, 28, 24);
+    // printMatrix(K, (char *)("Matrix K: "), M, d, 32, 32, 28, 24);
+    // printMatrix(V, (char *)("Matrix V: "), M, d, 32, 32, 28, 24);
 
     float *d_Q;
     float *d_K;

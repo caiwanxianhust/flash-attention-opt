@@ -1,5 +1,9 @@
 set(attention_files
     attention.cu
+    baseline.cu
+    flash_attn_minimal.cu
+    flash_attn_v1.cu
+    flash_attn_v2.cu
 )
 
 set (ATTENTION_HEADER_DIR

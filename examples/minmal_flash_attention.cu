@@ -42,7 +42,7 @@ void timingAttn(const float *Q, const float *K, const float *V, const int batch_
     CHECK_CUDA_ERROR(cudaEventRecord(start));
     for (int i = 0; i < REPEAT_NUM; ++i)
     {
-        attention::launchFlashAttentionMinimal(Q, K, V, batch_size, num_head, N, d, l, m, O);
+        launchFlashAttentionMinimal(Q, K, V, batch_size, num_head, N, d, l, m, O);
     }
     CHECK_CUDA_ERROR(cudaEventRecord(stop));
     CHECK_CUDA_ERROR(cudaEventSynchronize(stop));

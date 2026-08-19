@@ -1,6 +1,6 @@
 build/
 .vscode/
 pytorch_binding/profile/results/
-pytorch_binding/tests/__pycahe__/
-pytorch_binding/flash_attn/__pycahe__/
+pytorch_binding/tests/__pycache__/
+pytorch_binding/flash_attn/__pycache__/
 pytorch_binding/flash_attn/*.so
